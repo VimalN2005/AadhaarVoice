@@ -1,0 +1,29 @@
+services:
+  aadhaar-voice:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aadhaar_voice_app
+    ports:
+      - "8000:8000"
+    environment:
+      - APP_NAME=AadhaarVoice
+      - APP_ENV=production
+      - DEBUG=False
+      - HOST=0.0.0.0
+      - PORT=8000
+      - DATABASE_URL=sqlite:///./data/aadhaar_voice.db
+      - SECRET_KEY=prod-aadhaar-voice-secret-key-32-bytes-long!
+      - ENCRYPTION_KEY=dGVzdF9mZXJuZXRfa2V5X2Zvcl9kZXZlbG9wbWVudF8xMjM=
+    volumes:
+      - app_data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  app_data:
+    driver: local

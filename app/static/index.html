@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>🇮🇳 AadhaarVoice - AI Biometrics & Deepfake Defense</title>
+  <link rel="stylesheet" href="/static/css/style.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎙️</text></svg>" />
+</head>
+<body>
+  <div class="tricolor-bar"></div>
+
+  <!-- Header Navigation -->
+  <header class="navbar">
+    <div class="brand-container">
+      <div class="brand-logo">🇮🇳</div>
+      <div>
+        <div style="display:flex; align-items:center; gap:0.5rem;">
+          <h1 class="brand-title">AadhaarVoice</h1>
+          <span class="brand-badge">Hackathon Edition</span>
+        </div>
+        <p style="font-size:0.75rem; color:var(--text-muted); margin-top:2px;">
+          AI Voice Biometrics, Anti-Spoofing & Cryptographic Identity System
+        </p>
+      </div>
+    </div>
+    <div class="nav-links">
+      <a href="/docs" target="_blank" class="nav-btn">
+        <span>⚡</span> OpenAPI Specs
+      </a>
+      <a href="https://github.com/VimalN2005/AadhaarVoice" target="_blank" class="nav-btn">
+        <span>⭐</span> GitHub Repo
+      </a>
+    </div>
+  </header>
+
+  <!-- Educational Disclaimer Banner -->
+  <div class="disclaimer-banner">
+    <span>⚠️</span>
+    <strong>Research & Educational Sandbox:</strong> This prototype utilizes synthetic 12-digit demo VIDs and local acoustic models. It does not access real UIDAI data or perform actual citizen authentication.
+  </div>
+
+  <!-- Realtime Statistics Overview -->
+  <section class="stats-bar">
+    <div class="stat-chip">
+      <div class="stat-icon">👥</div>
+      <div>
+        <div class="stat-val" id="stat-enrolled">0</div>
+        <div class="stat-label">Enrolled Identities</div>
+      </div>
+    </div>
+    <div class="stat-chip">
+      <div class="stat-icon">🔐</div>
+      <div>
+        <div class="stat-val" id="stat-verifications">0</div>
+        <div class="stat-label">Biometric Verifications</div>
+      </div>
+    </div>
+    <div class="stat-chip">
+      <div class="stat-icon">🛡️</div>
+      <div>
+        <div class="stat-val" id="stat-deepfakes" style="color:#f87171;">0</div>
+        <div class="stat-label">Spoofs Intercepted</div>
+      </div>
+    </div>
+    <div class="stat-chip">
+      <div class="stat-icon">📐</div>
+      <div>
+        <div class="stat-val" style="color:var(--saffron);">Verhoeff D5</div>
+        <div class="stat-label">UIDAI Checksum Std</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Navigation Tabs -->
+  <nav class="tabs-header">
+    <button class="tab-btn active" data-tab="enroll-tab">
+      <span>🎙️</span> 1. Voice Enrollment
+    </button>
+    <button class="tab-btn" data-tab="verify-tab">
+      <span>🔐</span> 2. Biometric Verification
+    </button>
+    <button class="tab-btn" data-tab="deepfake-tab">
+      <span>🛡️</span> 3. Deepfake Forensics Lab
+    </button>
+    <button class="tab-btn" data-tab="clone-tab">
+      <span>🤖</span> 4. Voice Cloning Studio
+    </button>
+    <button class="tab-btn" data-tab="audit-tab">
+      <span>📊</span> 5. Audit Ledger
+    </button>
+  </nav>
+
+  <!-- Main Workspace -->
+  <main class="main-content">
+    
+    <!-- TAB 1: Voice Enrollment -->
+    <section id="enroll-tab" class="tab-panel active">
+      <div class="card-grid">
+        <div class="glass-card">
+          <div class="card-title">
+            <span>📝</span> Citizen Identity Enrollment
+          </div>
+          <p class="card-desc">
+            Register a synthetic demo Aadhaar VID and capture a vocal sample. The acoustic engine calculates a 192-dimensional biometric template and encrypts all sensitive records.
+          </p>
+
+          <form id="enroll-form" style="display:flex; flex-direction:column; gap:1rem;">
+            <div class="form-group">
+              <label class="form-label">Synthetic 12-Digit Demo VID</label>
+              <div style="display:flex; gap:0.5rem;">
+                <input type="text" id="enroll-vid" class="form-input" placeholder="e.g. 000012345678" style="flex:1;" required />
+                <button type="button" id="btn-gen-vid" class="btn btn-secondary" style="font-size:0.8rem; padding:0 0.8rem;">
+                  🎲 Auto-Generate
+                </button>
+              </div>
+              <span id="enroll-vid-feedback" style="font-size:0.75rem; color:#60a5fa; margin-top:2px;"></span>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Citizen Full Name</label>
+              <input type="text" id="enroll-name" class="form-input" placeholder="e.g. Vimal Sahani" required />
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Voice Sample Acquisition</label>
+              <div class="audio-recorder-box">
+                <canvas id="enroll-canvas" class="audio-canvas" width="360" height="70"></canvas>
+                <div class="rec-controls">
+                  <button type="button" id="btn-rec-enroll" class="btn btn-record">
+                    🎙️ Record Voice
+                  </button>
+                </div>
+                <div id="enroll-rec-status" style="font-size:0.78rem; color:var(--text-secondary);">
+                  Click record and speak a phrase (e.g. "My voice is my secure password")
+                </div>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Or Upload Audio File (.wav)</label>
+              <input type="file" id="enroll-file" class="form-input" accept="audio/*" />
+            </div>
+
+            <button type="submit" class="btn btn-saffron" style="margin-top:0.5rem;">
+              🚀 Enroll Biometric Profile
+            </button>
+          </form>
+        </div>
+
+        <div class="glass-card">
+          <div class="card-title">
+            <span>📊</span> Enrollment Diagnostics
+          </div>
+          <p class="card-desc">
+            Extracted acoustic features, fundamental frequency (F0), and HMAC-SHA256 biometric template hash.
+          </p>
+
+          <div id="enroll-result" class="result-card" style="display:none;"></div>
+
+          <div style="background:rgba(0,0,0,0.25); border-radius:var(--radius-md); padding:1rem; border:1px solid var(--border-color); font-size:0.82rem; color:var(--text-secondary); line-height:1.5;">
+            <strong style="color:#fff;">🔒 Security & Privacy Protocol:</strong>
+            <ul style="margin-left:1.2rem; margin-top:0.4rem;">
+              <li>VID verified with Verhoeff $D_5$ Dihedral permutation matrix.</li>
+              <li>Demographic names encrypted using Fernet (AES-128-CBC + HMAC).</li>
+              <li>Raw audio discarded after 192-dim embedding projection.</li>
+              <li>Biometric template hashed with HMAC-SHA256.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 2: Biometric Verification & Liveness -->
+    <section id="verify-tab" class="tab-panel">
+      <div class="card-grid">
+        <div class="glass-card">
+          <div class="card-title">
+            <span>🔐</span> 1:1 Voice Biometric Authentication
+          </div>
+          <p class="card-desc">
+            Authenticate an identity claim against enrolled vocal characteristics, protected by dynamic anti-replay challenge and anti-spoofing detection.
+          </p>
+
+          <form id="verify-form" style="display:flex; flex-direction:column; gap:1rem;">
+            <div class="form-group">
+              <label class="form-label">Enrolled 12-Digit VID</label>
+              <input type="text" id="verify-vid" class="form-input" placeholder="e.g. 000012345678" required />
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Dynamic Liveness Challenge</label>
+              <button type="button" id="btn-get-challenge" class="btn btn-secondary" style="font-size:0.85rem; width:fit-content;">
+                ⚡ Request Single-Use Challenge Passphrase
+              </button>
+              
+              <div id="challenge-display" class="challenge-box" style="display:none; margin-top:0.6rem;">
+                <span style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-secondary);">
+                  Speak this phrase aloud:
+                </span>
+                <div id="challenge-text" class="challenge-text">Aadhaar 8492</div>
+                <div id="challenge-phonetic" style="font-size:0.8rem; color:#93c5fd;"></div>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Candidate Voice Acquisition</label>
+              <div class="audio-recorder-box">
+                <canvas id="verify-canvas" class="audio-canvas" width="360" height="70"></canvas>
+                <div class="rec-controls">
+                  <button type="button" id="btn-rec-verify" class="btn btn-record">
+                    🎙️ Record Voice
+                  </button>
+                </div>
+                <div id="verify-rec-status" style="font-size:0.78rem; color:var(--text-secondary);">
+                  Record live response to the challenge passphrase
+                </div>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Or Upload Audio File (.wav)</label>
+              <input type="file" id="verify-file" class="form-input" accept="audio/*" />
+            </div>
+
+            <button type="submit" class="btn btn-green" style="margin-top:0.5rem;">
+              ✅ Verify Biometrics & Liveness
+            </button>
+          </form>
+        </div>
+
+        <div class="glass-card">
+          <div class="card-title">
+            <span>🎯</span> Verification Outcome
+          </div>
+          <p class="card-desc">
+            Cosine similarity match score, anti-spoofing clearance, and tamper-evident blockchain audit link.
+          </p>
+
+          <div id="verify-result" class="result-card" style="display:none;"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 3: Deepfake Forensics Lab -->
+    <section id="deepfake-tab" class="tab-panel">
+      <div class="card-grid">
+        <div class="glass-card">
+          <div class="card-title">
+            <span>🛡️</span> Neural Vocoder & Deepfake Forensics
+          </div>
+          <p class="card-desc">
+            Deep acoustic inspection of voice samples for synthetic speech signatures: micro-jitter loss, unnatural pitch flatlines, high-frequency cutoff, and vocoder phase anomalies.
+          </p>
+
+          <form id="deepfake-form" style="display:flex; flex-direction:column; gap:1rem;">
+            <div class="form-group">
+              <label class="form-label">Inspect Any Audio Sample</label>
+              <div class="audio-recorder-box">
+                <canvas id="deepfake-canvas" class="audio-canvas" width="360" height="70"></canvas>
+                <div class="rec-controls">
+                  <button type="button" id="btn-rec-deepfake" class="btn btn-record">
+                    🎙️ Record Audio
+                  </button>
+                </div>
+                <div id="deepfake-rec-status" style="font-size:0.78rem; color:var(--text-secondary);">
+                  Record or drag-and-drop any speech file to test authenticity
+                </div>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Upload Audio File (.wav)</label>
+              <input type="file" id="deepfake-file" class="form-input" accept="audio/*" />
+            </div>
+
+            <button type="submit" class="btn btn-primary" style="margin-top:0.5rem;">
+              🔬 Run Forensic Deepfake Inspection
+            </button>
+          </form>
+        </div>
+
+        <div class="glass-card">
+          <div class="card-title">
+            <span>🔍</span> Forensic Diagnostic Report
+          </div>
+          <p class="card-desc">
+            Multi-factor acoustic telemetry breakdown and anti-spoofing risk assessment.
+          </p>
+
+          <div id="deepfake-result" class="result-card" style="display:none;"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 4: Voice Cloning Studio -->
+    <section id="clone-tab" class="tab-panel">
+      <div class="card-grid">
+        <div class="glass-card">
+          <div class="card-title">
+            <span>🤖</span> Resonant Formant Voice Synthesizer
+          </div>
+          <p class="card-desc">
+            Synthesize speech adapting the fundamental frequency ($F_0$) and resonant formants ($F_1, F_2, F_3$) of an enrolled speaker. Demonstrates the mechanics of synthetic speech generation.
+          </p>
+
+          <form id="clone-form" style="display:flex; flex-direction:column; gap:1rem;">
+            <div class="form-group">
+              <label class="form-label">Select Enrolled Speaker Profile</label>
+              <select id="clone-profile-select" class="form-select">
+                <option value="">-- Generic Neutral Speaker --</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Text to Synthesize / Clone</label>
+              <textarea id="clone-text" class="form-textarea" rows="3" placeholder="Enter text to synthesize...">Aadhaar voice identity verification protocol active</textarea>
+            </div>
+
+            <button type="submit" class="btn btn-saffron" style="margin-top:0.5rem;">
+              🔊 Generate Cloned Speech
+            </button>
+          </form>
+        </div>
+
+        <div class="glass-card">
+          <div class="card-title">
+            <span>🎧</span> Audio Playback & Security Test
+          </div>
+          <p class="card-desc">
+            Listen to the synthesized speech and test it against the anti-spoofing engine to observe detection in action.
+          </p>
+
+          <div id="clone-result" class="result-card" style="display:none;"></div>
+          
+          <audio id="clone-audio-player" controls style="width:100%; display:none; margin-top:1rem;"></audio>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 5: Audit Ledger -->
+    <section id="audit-tab" class="tab-panel">
+      <div class="glass-card" style="width:100%;">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
+          <div>
+            <div class="card-title">
+              <span>📊</span> Tamper-Evident Cryptographic Audit Ledger
+            </div>
+            <p class="card-desc">
+              Every verification attempt is recorded in a SHA-256 hash-chained ledger. Any altered or omitted record breaks cryptographic integrity.
+            </p>
+          </div>
+          <button type="button" id="btn-verify-ledger" class="btn btn-primary" style="font-size:0.85rem;">
+            🛡️ Verify Ledger Integrity
+          </button>
+        </div>
+
+        <div id="ledger-integrity-status" style="margin-top:0.75rem;"></div>
+
+        <div class="table-container" style="margin-top:1rem;">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>VID</th>
+                <th>Status</th>
+                <th>Biometric Sim</th>
+                <th>Risk Level</th>
+                <th>Block Hash</th>
+                <th>Timestamp</th>
+              </tr>
+            </thead>
+            <tbody id="audit-table-body">
+              <tr>
+                <td colspan="7" style="text-align:center; color:var(--text-secondary);">Loading records...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div>
+      <strong>🇮🇳 AadhaarVoice</strong> | Developed by <a href="https://github.com/VimalN2005" target="_blank">Vimal Sahani</a>
+    </div>
+    <div>
+      AI Biometrics + Backend + Cybersecurity Hackathon Project
+    </div>
+  </footer>
+
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
