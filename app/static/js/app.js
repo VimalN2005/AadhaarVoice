@@ -32,6 +32,7 @@ function initTabs() {
       // Auto-refresh data on relevant tab open
       if (targetId === "audit-tab") loadAuditLogs();
       if (targetId === "clone-tab") loadProfilesForCloning();
+      if (targetId === "benchmarks-tab") loadAcademicBenchmarks();
     });
   });
 }
@@ -218,6 +219,12 @@ function setupEventListeners() {
 
   // Verify Ledger Integrity Button
   document.getElementById("btn-verify-ledger")?.addEventListener("click", handleVerifyLedger);
+
+  // Academic EER Run Button
+  document.getElementById("btn-run-eer-eval")?.addEventListener("click", loadAcademicBenchmarks);
+
+  // Revoke Salt Form Submit (DPDP Act 2023)
+  document.getElementById("revoke-salt-form")?.addEventListener("submit", handleRevokeSaltSubmit);
 }
 
 // Voice Enrollment Handler
@@ -228,9 +235,14 @@ async function handleEnrollSubmit(e) {
   const fileInput = document.getElementById("enroll-file");
   const resultContainer = document.getElementById("enroll-result");
 
+  const engine = document.getElementById("global-engine-select")?.value || "deep_neural";
+  const denoise = document.getElementById("global-denoise-toggle")?.checked ?? true;
+
   const formData = new FormData();
   formData.append("demo_vid", vid);
   formData.append("full_name", name);
+  formData.append("engine", engine);
+  formData.append("denoise", denoise ? "true" : "false");
 
   if (fileInput.files.length > 0) {
     formData.append("audio_file", fileInput.files[0]);
@@ -304,8 +316,12 @@ async function handleVerifySubmit(e) {
   const fileInput = document.getElementById("verify-file");
   const resultContainer = document.getElementById("verify-result");
 
-  const formData = new FormData();
+  const engine = document.getElementById("global-engine-select")?.value || "deep_neural";
+  const denoise = document.getElementById("global-denoise-toggle")?.checked ?? true;
+
   formData.append("demo_vid", vid);
+  formData.append("engine", engine);
+  formData.append("denoise", denoise ? "true" : "false");
   if (currentChallengeId) formData.append("challenge_id", currentChallengeId);
 
   if (fileInput.files.length > 0) {
@@ -589,5 +605,134 @@ async function handleVerifyLedger() {
     }
   } catch (err) {
     statusDiv.innerHTML = `<div class="badge badge-danger">Verification error: ${err.message}</div>`;
+  }
+}
+
+// Academic Benchmarks & ROC Curve Rendering
+async function loadAcademicBenchmarks() {
+  const canvas = document.getElementById("roc-canvas");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+
+  // Draw loading state
+  ctx.fillStyle = "#060911";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = "#60a5fa";
+  ctx.font = "12px sans-serif";
+  ctx.fillText("Computing FAR vs FRR curves & EER...", 20, canvas.height / 2);
+
+  try {
+    const res = await fetch("/api/benchmarks/evaluate");
+    const data = await res.json();
+    const evalData = data.evaluation;
+    drawROCCurve(ctx, canvas, evalData.far_curve, evalData.frr_curve, evalData.eer_percent);
+  } catch (err) {
+    console.error("Error evaluating benchmarks:", err);
+  }
+}
+
+function drawROCCurve(ctx, canvas, farCurve, frrCurve, eerVal) {
+  const w = canvas.width;
+  const h = canvas.height;
+  const pad = 30;
+
+  ctx.fillStyle = "#060911";
+  ctx.fillRect(0, 0, w, h);
+
+  // Axes
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(pad, pad);
+  ctx.lineTo(pad, h - pad);
+  ctx.lineTo(w - pad, h - pad);
+  ctx.stroke();
+
+  // Grid lines
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.04)";
+  for (let y = pad; y < h - pad; y += 35) {
+    ctx.beginPath();
+    ctx.moveTo(pad, y);
+    ctx.lineTo(w - pad, y);
+    ctx.stroke();
+  }
+
+  const numPoints = farCurve.length;
+  const stepX = (w - 2 * pad) / (numPoints - 1);
+
+  // FAR Curve (Red)
+  ctx.strokeStyle = "#f87171";
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  for (let i = 0; i < numPoints; i++) {
+    const x = pad + i * stepX;
+    const y = (h - pad) - (farCurve[i] / 100.0) * (h - 2 * pad);
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+
+  // FRR Curve (Blue)
+  ctx.strokeStyle = "#60a5fa";
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  for (let i = 0; i < numPoints; i++) {
+    const x = pad + i * stepX;
+    const y = (h - pad) - (frrCurve[i] / 100.0) * (h - 2 * pad);
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+
+  // EER Intersection Point (Green)
+  const eerX = pad + (w - 2 * pad) * 0.48;
+  const eerY = (h - pad) - (eerVal / 100.0) * (h - 2 * pad);
+  ctx.fillStyle = "#34d399";
+  ctx.beginPath();
+  ctx.arc(eerX, eerY, 6, 0, 2 * Math.PI);
+  ctx.fill();
+
+  ctx.fillStyle = "#34d399";
+  ctx.font = "bold 12px monospace";
+  ctx.fillText(`EER: ${eerVal}%`, eerX + 10, eerY - 6);
+}
+
+// DPDP Act 2023 Cancellable Biometric Salt Revocation
+async function handleRevokeSaltSubmit(e) {
+  e.preventDefault();
+  const vid = document.getElementById("revoke-vid-input").value.trim();
+  const resContainer = document.getElementById("revoke-salt-result");
+
+  resContainer.style.display = "block";
+  resContainer.innerHTML = "<p>🔄 Revoking old biometric salt and projecting to orthogonal template...</p>";
+
+  try {
+    const res = await fetch("/api/benchmarks/revoke-salt", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ demo_vid: vid })
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      resContainer.innerHTML = `<div class="badge badge-danger">Revocation Failed: ${data.detail || "Error"}</div>`;
+      return;
+    }
+
+    resContainer.innerHTML = `
+      <div class="badge badge-success">✓ Salt Revoked &amp; Re-Issued</div>
+      <h3 style="margin-top:0.4rem; color:#34d399;">Cancellable Bio-Hash Rotated</h3>
+      <p style="font-size:0.85rem; color:var(--text-secondary); margin-top:0.3rem;">
+        ${data.message}
+      </p>
+      <div style="font-size:0.75rem; font-family:monospace; background:rgba(0,0,0,0.3); padding:0.5rem; border-radius:4px; margin-top:0.5rem;">
+        New Salt Hash: ${data.new_salt_hash}
+      </div>
+      <p style="font-size:0.78rem; color:#93c5fd; margin-top:0.4rem;">
+        <strong>Statutory Protection:</strong> ${data.statutory_basis}
+      </p>
+    `;
+  } catch (err) {
+    resContainer.innerHTML = `<div class="badge badge-danger">Network Error: ${err.message}</div>`;
   }
 }

@@ -28,6 +28,9 @@ from app.ml.voice_biometrics import (
     deserialize_embedding,
 )
 from app.ml.deepfake_detector import detect_deepfake
+from app.ml.neural_anti_spoof import get_neural_anti_spoof_classifier
+from app.ml.denoiser import enhance_indian_ambient_speech
+from app.core.cancellable_biometrics import generate_citizen_salt, shred_audio_buffer
 from app.ml.voice_cloner import clone_speaker_voice
 from app.ml.liveness import generate_challenge
 
@@ -46,14 +49,18 @@ async def enroll_voice(
     demo_vid: str = Form(...),
     full_name: str = Form(...),
     phone: Optional[str] = Form(None),
+    engine: str = Form("deep_neural"),
+    denoise: bool = Form(True),
     audio_file: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
     """
     Enrolls a new voice biometric identity profile.
     - Validates 12-digit demo VID using Verhoeff checksum.
-    - Extracts 192-dimensional acoustic biometric embedding.
+    - Applies Indian ambient noise suppression (fan, traffic hum) if enabled.
+    - Extracts 192-dimensional ECAPA-TDNN / Baseline biometric embedding.
     - Encrypts demographic fields and stores irreversible biometric hash.
+    - Zeroizes audio memory buffer for DPDP Act 2023 compliance.
     """
     clean_vid = "".join(filter(str.isdigit, demo_vid))
     if len(clean_vid) != 12 or not validate_verhoeff(clean_vid):
@@ -85,11 +92,21 @@ async def enroll_voice(
             detail="Audio sample too short. Please provide at least 1.0 second of clear speech."
         )
 
-    # Extract features and 192-dim embedding
+    # Indian Ambient Noise Suppression
+    snr_gain = 0.0
+    if denoise:
+        denoise_pkg = enhance_indian_ambient_speech(signal, sr)
+        signal = denoise_pkg["enhanced_audio"]
+        snr_gain = denoise_pkg["snr_improvement_db"]
+
+    # Extract features and 192-dim embedding (ECAPA-TDNN or Baseline)
     feats = extract_all_features(signal, sr)
-    embedding = generate_voice_embedding(signal, sr)
+    embedding = generate_voice_embedding(signal, sr, engine=engine)
     embedding_json = serialize_embedding(embedding)
     emb_hash = hash_biometric_template(embedding.tobytes())
+
+    # DPDP Act 2023: Zero raw audio memory retention
+    shred_audio_buffer(signal)
 
     # Create VoiceProfile record
     profile = VoiceProfile(
@@ -113,6 +130,9 @@ async def enroll_voice(
         "demo_vid": clean_vid,
         "masked_vid": format_aadhaar(clean_vid, mask=True),
         "holder_name": full_name,
+        "engine_used": "Proposed ECAPA-TDNN Deep SE-TDNN" if engine == "deep_neural" else "Baseline Handcrafted MFCC",
+        "ambient_denoised": denoise,
+        "snr_improvement_db": snr_gain,
         "features": {
             "pitch_f0_hz": feats["pitch_f0_hz"],
             "pitch_jitter": feats["pitch_jitter"],
@@ -121,6 +141,10 @@ async def enroll_voice(
         },
         "embedding_dimensions": 192,
         "embedding_sha256": emb_hash,
+        "dpdp_act_compliance": {
+            "zero_raw_audio_stored": True,
+            "statute": "DPDP Act 2023 Sec 8 Safeguards",
+        },
     }
 
 
@@ -129,16 +153,19 @@ async def verify_voice(
     request: Request,
     demo_vid: str = Form(...),
     challenge_id: Optional[str] = Form(None),
+    engine: str = Form("deep_neural"),
+    denoise: bool = Form(True),
     audio_file: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
     """
     Performs 1:1 voice biometric authentication against enrolled template:
-    1. Preprocesses candidate audio
-    2. Deepfake / synthetic speech detection
-    3. Cosine similarity matching
-    4. Optional dynamic liveness challenge verification
-    5. Appends tamper-evident audit ledger record
+    1. Preprocesses candidate audio with Indian ambient noise suppression
+    2. Deep neural + heuristic anti-spoofing detection (ElevenLabs/XTTS defense)
+    3. Cosine similarity matching using selected engine (ECAPA-TDNN vs Baseline)
+    4. Dynamic anti-replay challenge verification
+    5. Append tamper-evident audit ledger record
+    6. Purges raw audio from memory (DPDP Act 2023)
     """
     clean_vid = "".join(filter(str.isdigit, demo_vid))
     profile = db.query(VoiceProfile).filter(VoiceProfile.demo_vid == clean_vid).first()
@@ -156,13 +183,28 @@ async def verify_voice(
     if len(signal) < sr * 0.4:
         raise HTTPException(status_code=400, detail="Verification sample too short.")
 
-    # 1. Anti-Spoofing & Deepfake Detection
-    deepfake_report = detect_deepfake(signal, sr)
+    # Indian Ambient Noise Suppression
+    snr_gain = 0.0
+    if denoise:
+        denoise_pkg = enhance_indian_ambient_speech(signal, sr)
+        signal = denoise_pkg["enhanced_audio"]
+        snr_gain = denoise_pkg["snr_improvement_db"]
+
+    # 1. Anti-Spoofing: Baseline Heuristic + Neural AASIST Detection
+    baseline_deepfake = detect_deepfake(signal, sr)
+    neural_clf = get_neural_anti_spoof_classifier()
+    neural_deepfake = neural_clf.analyze_neural_deepfake(signal, sr)
+
+    is_synthetic_flag = baseline_deepfake["is_synthetic"] or neural_deepfake["is_synthetic"]
+    max_spoof_prob = max(baseline_deepfake["synthetic_probability"], neural_deepfake["deepfake_probability"])
 
     # 2. Extract Candidate Embedding & Match
-    candidate_embedding = generate_voice_embedding(signal, sr)
+    candidate_embedding = generate_voice_embedding(signal, sr, engine=engine)
     enrolled_embedding = deserialize_embedding(profile.embedding_json)
     match_result = verify_speaker(enrolled_embedding, candidate_embedding)
+
+    # DPDP Act 2023 Memory Zeroization
+    shred_audio_buffer(signal)
 
     # 3. Liveness Check
     challenge_passed = True
@@ -181,10 +223,10 @@ async def verify_voice(
             db.commit()
 
     # Determine final authentication status
-    if deepfake_report["is_synthetic"]:
+    if is_synthetic_flag:
         status_str = "SPOOF_DETECTED"
         verified = False
-        failure_reason = "Synthetic/cloned deepfake voice pattern detected by anti-spoofing engine."
+        failure_reason = "Synthetic/cloned deepfake voice pattern detected by neural anti-spoofing engine."
     elif not match_result["is_match"]:
         status_str = "REJECTED"
         verified = False
@@ -202,7 +244,7 @@ async def verify_voice(
     last_log = db.query(VerificationLog).order_by(VerificationLog.id.desc()).first()
     prev_hash = last_log.current_hash if last_log else "0" * 64
     now_iso = datetime.now(timezone.utc).isoformat()
-    audit_data_str = f"{clean_vid}:{verified}:{match_result['cosine_similarity']}:{deepfake_report['synthetic_probability']}"
+    audit_data_str = f"{clean_vid}:{verified}:{match_result['cosine_similarity']}:{max_spoof_prob}"
     current_hash = compute_audit_hash(prev_hash, now_iso, audit_data_str)
 
     client_ip = request.client.host if request.client else "127.0.0.1"
@@ -213,9 +255,9 @@ async def verify_voice(
         demo_vid=clean_vid,
         verified=verified,
         similarity_score=match_result["cosine_similarity"],
-        deepfake_score=deepfake_report["synthetic_probability"],
-        is_synthetic=deepfake_report["is_synthetic"],
-        risk_level=deepfake_report["risk_level"],
+        deepfake_score=max_spoof_prob,
+        is_synthetic=is_synthetic_flag,
+        risk_level=neural_deepfake["risk_level"] if neural_deepfake["is_synthetic"] else baseline_deepfake["risk_level"],
         challenge_passed=challenge_passed,
         status=status_str,
         failure_reason=failure_reason,
@@ -235,6 +277,9 @@ async def verify_voice(
         "demo_vid": clean_vid,
         "masked_vid": format_aadhaar(clean_vid, mask=True),
         "holder_name": decrypt_field(profile.full_name_encrypted),
+        "engine_used": "Proposed ECAPA-TDNN Deep SE-TDNN" if engine == "deep_neural" else "Baseline Handcrafted MFCC",
+        "ambient_denoised": denoise,
+        "snr_improvement_db": snr_gain,
         "biometric_score": {
             "similarity_percent": match_result["display_score_percent"],
             "cosine_similarity": match_result["cosine_similarity"],
@@ -242,11 +287,12 @@ async def verify_voice(
             "threshold": match_result["threshold_used"],
         },
         "anti_spoofing": {
-            "is_synthetic": deepfake_report["is_synthetic"],
-            "deepfake_probability_percent": deepfake_report["synthetic_score_percent"],
-            "risk_level": deepfake_report["risk_level"],
-            "verdict": deepfake_report["verdict"],
-            "forensics": deepfake_report["forensic_breakdown"],
+            "is_synthetic": is_synthetic_flag,
+            "deepfake_probability_percent": round(max_spoof_prob * 100, 2),
+            "risk_level": neural_deepfake["risk_level"] if neural_deepfake["is_synthetic"] else baseline_deepfake["risk_level"],
+            "verdict": neural_deepfake["verdict"] if neural_deepfake["is_synthetic"] else baseline_deepfake["verdict"],
+            "neural_defense": neural_deepfake,
+            "heuristic_forensics": baseline_deepfake["forensic_breakdown"],
         },
         "audit": {
             "log_id": log_entry.id,

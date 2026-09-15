@@ -33,9 +33,9 @@ def test_biometric_speaker_discrimination():
     # Speaker 2: Female pitch ~230 Hz
     spk2 = synthesize_formant_speech("Hello identity access confirm", pitch_f0=230.0, is_cloned_vocoder=False)
 
-    emb1_a = generate_voice_embedding(spk1_a)
-    emb1_b = generate_voice_embedding(spk1_b)
-    emb2 = generate_voice_embedding(spk2)
+    emb1_a = generate_voice_embedding(spk1_a, engine="baseline")
+    emb1_b = generate_voice_embedding(spk1_b, engine="baseline")
+    emb2 = generate_voice_embedding(spk2, engine="baseline")
 
     sim_same = compute_cosine_similarity(emb1_a, emb1_b)
     sim_diff = compute_cosine_similarity(emb1_a, emb2)
