@@ -12,6 +12,7 @@ Extracts:
 from typing import Dict, Any, Tuple
 import numpy as np
 from scipy import fftpack
+from scipy.signal import welch
 
 
 def hz_to_mel(hz: float) -> float:
@@ -284,3 +285,63 @@ def extract_all_features(signal: np.ndarray, sample_rate: int = 16000) -> Dict[s
         **spectral,
         "duration_seconds": round(len(signal) / sample_rate, 2),
     }
+
+
+class ForensicFeatureExtractor:
+    def __init__(self, sample_rate: int = 16000):
+        self.sr = sample_rate
+
+    def calculate_fricative_ratio(self, audio_data: np.ndarray) -> float:
+        """
+        Check 1: 'Sh' (श) and 'S' (स) sound check.
+        Human fricatives produce energy between 6.5kHz and 12kHz.
+        AI Vocoders (HiFi-GAN) often lose energy or create flat blur here.
+        """
+        if len(audio_data) < 256:
+            return 0.0
+        nperseg = min(1024, len(audio_data))
+        freqs, psd = welch(audio_data, fs=self.sr, nperseg=nperseg)
+
+        # Energy below 6kHz (vocal range) vs Energy above 6.5kHz (fricatives)
+        low_band_energy = np.sum(psd[(freqs >= 300) & (freqs < 6000)])
+        high_band_energy = np.sum(psd[(freqs >= 6500) & (freqs <= 8000)])
+
+        if low_band_energy == 0:
+            return 0.0
+
+        # Ratio of high-frequency friction
+        ratio = high_band_energy / (low_band_energy + 1e-8)
+        return float(ratio)
+
+    def calculate_micro_jitter(self, pitch_values: np.ndarray) -> float:
+        """
+        Check 2: Micro-Jitter (Biological Tremors).
+        Pitch values (F0) frame-by-frame nikal kar unka cycle-to-cycle variation check karta hai.
+        Human voice: Jitter usually 0.5% to 2.5%.
+        AI clone: Often < 0.2% (Unnaturally smooth / robotic).
+        """
+        pitch_arr = np.asarray(pitch_values)
+        valid_pitches = pitch_arr[pitch_arr > 50]  # Unvoiced frames drop karo
+        if len(valid_pitches) < 5:
+            return 0.0
+
+        # Jitter formula: Mean absolute difference between consecutive pitch periods / Mean pitch
+        diffs = np.abs(np.diff(valid_pitches))
+        jitter = np.mean(diffs) / (np.mean(valid_pitches) + 1e-8)
+        return float(jitter * 100)  # In percentage
+
+    def calculate_silence_entropy(self, audio_data: np.ndarray, threshold: float = 0.01) -> float:
+        """
+        Check 3: Room Ambient Acoustics vs Digital Zero.
+        Words ke beech ka pause check karta hai.
+        Human: Natural room background noise / breath (Entropy > 0.05).
+        AI Clone: Pure digital zeros ya flat line (Entropy ~ 0.00).
+        """
+        # Unvoiced/Silent frames find karo
+        silence_frames = audio_data[np.abs(audio_data) < threshold]
+        if len(silence_frames) < 100:
+            return 0.5  # Normal
+
+        # Calculate standard deviation & entropy of background noise
+        noise_std = np.std(silence_frames)
+        return float(noise_std)

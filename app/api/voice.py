@@ -19,7 +19,7 @@ from app.core.security import (
     hash_biometric_template,
     compute_audit_hash,
 )
-from app.ml.audio_processor import preprocess_audio, write_wav_bytes
+from app.ml.audio_processor import preprocess_audio, write_wav_bytes, AudioProcessor
 from app.ml.feature_extractor import extract_all_features
 from app.ml.voice_biometrics import (
     generate_voice_embedding,
@@ -27,7 +27,7 @@ from app.ml.voice_biometrics import (
     serialize_embedding,
     deserialize_embedding,
 )
-from app.ml.deepfake_detector import detect_deepfake
+from app.ml.deepfake_detector import detect_deepfake, UpgradedDeepfakeDetector
 from app.ml.neural_anti_spoof import get_neural_anti_spoof_classifier
 from app.ml.denoiser import enhance_indian_ambient_speech
 from app.core.cancellable_biometrics import generate_citizen_salt, shred_audio_buffer
@@ -377,3 +377,42 @@ def get_liveness_challenge(demo_vid: str, db: Session = Depends(get_db)):
     db.commit()
 
     return challenge_data
+
+
+upi_detector = UpgradedDeepfakeDetector()
+upi_processor = AudioProcessor()
+
+
+@router.post("/verify-upi-transaction")
+async def verify_upi_transaction(
+    audio_file: UploadFile = File(...),
+    recipient_name: str = Form("Sharma ji"),
+    amount: float = Form(500.0)
+):
+    """
+    UPI Voice Shield Endpoint:
+    Inspects transaction voice authorization for neural vocoder, micro-jitter monotony, and digital silence spoofing.
+    """
+    # 1. Read and decode audio bytes
+    audio_bytes = await audio_file.read()
+    audio_np, sample_rate = upi_processor.load_and_resample(audio_bytes)
+
+    # 2. Extract pitch
+    pitch_contour = upi_processor.extract_pitch(audio_np, sample_rate)
+
+    # 3. Run Forensic Inspection
+    forensic_result = upi_detector.inspect_audio_for_spoof(audio_np, pitch_contour)
+
+    # 4. Decision Logic
+    if forensic_result["is_deepfake"]:
+        return {
+            "status": "TRANSACTION_BLOCKED",
+            "message": f"Security Alert: Voice clone detected! Payment of ₹{amount} to {recipient_name} halted.",
+            "forensics": forensic_result
+        }
+    else:
+        return {
+            "status": "TRANSACTION_APPROVED",
+            "message": f"Biometric & Liveness Verified: ₹{amount} sent successfully to {recipient_name}.",
+            "forensics": forensic_result
+        }

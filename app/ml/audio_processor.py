@@ -164,3 +164,39 @@ def preprocess_audio(audio_bytes: bytes, target_sr: int = 16000) -> Tuple[np.nda
         data = data / peak
 
     return data.astype(np.float32), target_sr
+
+
+class AudioProcessor:
+    """
+    Audio Processor utility class for loading, decoding, resampling, and extracting pitch.
+    """
+    def __init__(self, target_sr: int = 16000):
+        self.target_sr = target_sr
+
+    def load_and_resample(self, audio_bytes: bytes) -> Tuple[np.ndarray, int]:
+        try:
+            raw_data, orig_sr = read_wav_bytes(audio_bytes)
+        except Exception:
+            try:
+                import miniaudio
+                decoded = miniaudio.decode(
+                    audio_bytes,
+                    nchannels=1,
+                    sample_rate=self.target_sr,
+                    output_format=miniaudio.SampleFormat.FLOAT32
+                )
+                return np.array(decoded.samples, dtype=np.float32), self.target_sr
+            except Exception:
+                if len(audio_bytes) >= 2:
+                    num_samples = len(audio_bytes) // 2
+                    raw_data = np.frombuffer(audio_bytes[:num_samples * 2], dtype=np.int16).astype(np.float32) / 32768.0
+                    orig_sr = self.target_sr
+                else:
+                    raise ValueError("Audio buffer is invalid or too short.")
+        resampled = resample_audio(raw_data, orig_sr, self.target_sr)
+        return resampled.astype(np.float32), self.target_sr
+
+    def extract_pitch(self, audio_np: np.ndarray, sample_rate: int = 16000) -> np.ndarray:
+        from app.ml.feature_extractor import extract_pitch_f0
+        _, f0_contour, _, _ = extract_pitch_f0(audio_np, sample_rate)
+        return np.array(f0_contour, dtype=np.float32)

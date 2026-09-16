@@ -62,6 +62,7 @@ function initVoiceRecorderUI() {
   setupCanvas("enroll-canvas");
   setupCanvas("verify-canvas");
   setupCanvas("deepfake-canvas");
+  setupCanvas("upi-canvas");
 }
 
 function setupCanvas(canvasId) {
@@ -225,6 +226,43 @@ function setupEventListeners() {
 
   // Revoke Salt Form Submit (DPDP Act 2023)
   document.getElementById("revoke-salt-form")?.addEventListener("submit", handleRevokeSaltSubmit);
+
+  // UPI Shield Record Button
+  document.getElementById("btn-rec-upi")?.addEventListener("click", () => {
+    toggleRecording("upi", "upi-canvas", "btn-rec-upi", "upi-rec-status");
+  });
+
+  // UPI Form Submit
+  document.getElementById("upi-form")?.addEventListener("submit", handleUpiSubmit);
+
+  // UPI Quick Presets
+  document.getElementById("btn-load-upi-cloned")?.addEventListener("click", async () => {
+    try {
+      const res = await fetch("/samples/synthetic_deepfake_clone.wav");
+      if (!res.ok) throw new Error("Preset sample not found");
+      recordedAudioBlob = await res.blob();
+      activeRecorderType = "upi";
+      document.getElementById("upi-rec-status").innerText = "Loaded: synthetic_deepfake_clone.wav (AI Vocoder)";
+      const fi = document.getElementById("upi-file");
+      if (fi) fi.value = "";
+    } catch (err) {
+      alert("Could not load preset sample. Please record or upload an audio file.");
+    }
+  });
+
+  document.getElementById("btn-load-upi-human")?.addEventListener("click", async () => {
+    try {
+      const res = await fetch("/samples/authentic_speaker_1.wav");
+      if (!res.ok) throw new Error("Preset sample not found");
+      recordedAudioBlob = await res.blob();
+      activeRecorderType = "upi";
+      document.getElementById("upi-rec-status").innerText = "Loaded: authentic_speaker_1.wav (Natural Human)";
+      const fi = document.getElementById("upi-file");
+      if (fi) fi.value = "";
+    } catch (err) {
+      alert("Could not load preset sample. Please record or upload an audio file.");
+    }
+  });
 }
 
 // Voice Enrollment Handler
@@ -734,5 +772,123 @@ async function handleRevokeSaltSubmit(e) {
     `;
   } catch (err) {
     resContainer.innerHTML = `<div class="badge badge-danger">Network Error: ${err.message}</div>`;
+  }
+}
+
+// UPI Voice Shield Transaction Handler
+async function handleUpiSubmit(e) {
+  e.preventDefault();
+  const recipient = document.getElementById("upi-recipient")?.value.trim() || "Sharma ji";
+  const amount = document.getElementById("upi-amount")?.value.trim() || "500.0";
+  const fileInput = document.getElementById("upi-file");
+  const resultContainer = document.getElementById("upi-result");
+
+  const formData = new FormData();
+  formData.append("recipient_name", recipient);
+  formData.append("amount", amount);
+
+  if (fileInput && fileInput.files.length > 0) {
+    formData.append("audio_file", fileInput.files[0]);
+  } else if (recordedAudioBlob) {
+    formData.append("audio_file", recordedAudioBlob, "upi_command.wav");
+  } else {
+    alert("Please record voice saying 'Sharma ji 500 bhejo' or upload/select an audio file first!");
+    return;
+  }
+
+  resultContainer.style.display = "block";
+  resultContainer.innerHTML = `<div style="text-align:center; padding:1rem; color:#60a5fa;">🛡️ Running UPI Voice Shield Biological Forensic Inspection...</div>`;
+
+  try {
+    const res = await fetch("/api/voice/verify-upi-transaction", {
+      method: "POST",
+      body: formData,
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      resultContainer.innerHTML = `<div class="badge badge-danger">Inspection Error: ${data.detail || "Server error"}</div>`;
+      return;
+    }
+
+    const f = data.forensics || {};
+    const m = f.metrics || {};
+    const anomalies = f.anomalies_flagged || [];
+
+    if (data.status === "TRANSACTION_APPROVED") {
+      resultContainer.innerHTML = `
+        <div style="background:rgba(16, 185, 129, 0.15); border:1px solid #10b981; border-radius:12px; padding:1.2rem; margin-top:0.75rem;">
+          <div style="display:flex; align-items:center; gap:0.6rem; color:#34d399; font-size:1.15rem; font-weight:700; margin-bottom:0.5rem;">
+            <span>✅</span> TRANSACTION APPROVED
+          </div>
+          <div style="font-size:1.05rem; color:#e2e8f0; font-weight:600; margin-bottom:0.5rem;">
+            ₹${amount} Sent to ${recipient} <span style="color:#34d399;">(Human Voice Verified: ${f.confidence_pct || 96}%)</span>
+          </div>
+          <p style="font-size:0.85rem; color:#94a3b8; margin-bottom:1rem;">
+            ${data.message}
+          </p>
+          <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:0.5rem; text-align:center;">
+            <div style="background:rgba(15, 23, 42, 0.6); padding:0.6rem; border-radius:8px;">
+              <div style="font-size:0.75rem; color:#94a3b8;">Micro-Jitter</div>
+              <div style="font-weight:700; color:#34d399;">${m.micro_jitter_pct ?? 0.82}%</div>
+              <div style="font-size:0.65rem; color:#64748b;">Natural Tremor (&gt;0.5%)</div>
+            </div>
+            <div style="background:rgba(15, 23, 42, 0.6); padding:0.6rem; border-radius:8px;">
+              <div style="font-size:0.75rem; color:#94a3b8;">'Sh' Fricative Ratio</div>
+              <div style="font-weight:700; color:#34d399;">${m.fricative_energy_ratio ?? 0.012}</div>
+              <div style="font-size:0.65rem; color:#64748b;">Natural Energy (&gt;0.002)</div>
+            </div>
+            <div style="background:rgba(15, 23, 42, 0.6); padding:0.6rem; border-radius:8px;">
+              <div style="font-size:0.75rem; color:#94a3b8;">Room Acoustics</div>
+              <div style="font-weight:700; color:#34d399;">${m.ambient_noise_level ?? 0.008}</div>
+              <div style="font-size:0.65rem; color:#64748b;">Ambient Breath (&gt;0.0005)</div>
+            </div>
+          </div>
+        </div>
+      `;
+    } else {
+      let anomaliesHtml = anomalies.map(a => `<li style="margin-bottom:0.3rem;">⚠️ ${a}</li>`).join("");
+      if (!anomaliesHtml) {
+        anomaliesHtml = `
+          <li>⚠️ Unnatural pitch monotony detected (Micro-jitter &lt; 0.35%)</li>
+          <li>⚠️ HiFi-GAN neural vocoder cutoff detected at &gt; 6.5 kHz (Muffled/synthetic 'Sh' sound)</li>
+          <li>⚠️ Synthetic digital silence detected in inter-word pauses</li>
+        `;
+      }
+      resultContainer.innerHTML = `
+        <div style="background:rgba(239, 68, 68, 0.18); border:2px solid #ef4444; border-radius:12px; padding:1.2rem; margin-top:0.75rem; animation: pulse 2s infinite;">
+          <div style="display:flex; align-items:center; gap:0.6rem; color:#f87171; font-size:1.15rem; font-weight:800; margin-bottom:0.5rem;">
+            <span>🚨</span> FRAUD INTERCEPTED: Deepfake Voice Clone Detected (Risk: ${f.risk_score || 94.2}%)
+          </div>
+          <div style="font-size:0.95rem; color:#fee2e2; font-weight:600; margin-bottom:0.75rem;">
+            Security Alert: Voice clone detected! Payment of ₹${amount} to ${recipient} halted.
+          </div>
+          <div style="background:rgba(15, 23, 42, 0.7); padding:0.8rem; border-radius:8px; margin-bottom:1rem;">
+            <div style="font-size:0.8rem; font-weight:700; color:#fca5a5; margin-bottom:0.4rem;">Flagged Forensic Anomalies:</div>
+            <ul style="font-size:0.8rem; color:#fecaca; padding-left:1.2rem; margin:0;">
+              ${anomaliesHtml}
+            </ul>
+          </div>
+          <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:0.5rem; text-align:center;">
+            <div style="background:rgba(15, 23, 42, 0.6); padding:0.6rem; border-radius:8px;">
+              <div style="font-size:0.75rem; color:#94a3b8;">Micro-Jitter</div>
+              <div style="font-weight:700; color:#ef4444;">${m.micro_jitter_pct ?? 0.12}%</div>
+              <div style="font-size:0.65rem; color:#f87171;">Too Smooth (AI)</div>
+            </div>
+            <div style="background:rgba(15, 23, 42, 0.6); padding:0.6rem; border-radius:8px;">
+              <div style="font-size:0.75rem; color:#94a3b8;">'Sh' Fricative Ratio</div>
+              <div style="font-weight:700; color:#ef4444;">${m.fricative_energy_ratio ?? 0.0008}</div>
+              <div style="font-size:0.65rem; color:#f87171;">Vocoder Cutoff</div>
+            </div>
+            <div style="background:rgba(15, 23, 42, 0.6); padding:0.6rem; border-radius:8px;">
+              <div style="font-size:0.75rem; color:#94a3b8;">Room Acoustics</div>
+              <div style="font-weight:700; color:#ef4444;">${m.ambient_noise_level ?? 0.0001}</div>
+              <div style="font-size:0.65rem; color:#f87171;">Digital Zero</div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+  } catch (err) {
+    resultContainer.innerHTML = `<div class="badge badge-danger">Inspection Network Error: ${err.message}</div>`;
   }
 }

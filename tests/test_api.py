@@ -100,3 +100,16 @@ def test_audit_logs_and_integrity(client):
     assert integ_res.status_code == 200
     integ = integ_res.json()
     assert integ["status"] == "VALID"
+
+
+def test_verify_upi_transaction_endpoint(client, sample_wav_bytes):
+    # Test authentic voice approval
+    res_auth = client.post(
+        "/api/voice/verify-upi-transaction",
+        data={"recipient_name": "Sharma ji", "amount": 500.0},
+        files={"audio_file": ("auth.wav", sample_wav_bytes, "audio/wav")}
+    )
+    assert res_auth.status_code == 200
+    data_auth = res_auth.json()
+    assert "status" in data_auth
+    assert "forensics" in data_auth

@@ -18,6 +18,7 @@ from app.api.audit import router as audit_router
 from app.api.benchmarks import router as benchmarks_router
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
+SAMPLES_DIR = Path(__file__).resolve().parent.parent / "samples"
 
 
 @asynccontextmanager
@@ -60,6 +61,9 @@ app.add_middleware(
 # Mount static assets
 if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+if SAMPLES_DIR.exists():
+    app.mount("/samples", StaticFiles(directory=str(SAMPLES_DIR)), name="samples")
 
 # Register API routers
 app.include_router(auth_router)

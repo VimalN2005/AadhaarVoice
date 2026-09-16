@@ -12,6 +12,7 @@ import numpy as np
 from app.ml.feature_extractor import (
     extract_all_features,
     compute_stft,
+    ForensicFeatureExtractor,
 )
 from app.core.config import settings
 
@@ -128,3 +129,50 @@ def detect_deepfake(signal: np.ndarray, sample_rate: int = 16000) -> Dict[str, A
         },
         "recommendation": recommendation,
     }
+
+
+class UpgradedDeepfakeDetector:
+    def __init__(self, sample_rate: int = 16000):
+        self.extractor = ForensicFeatureExtractor(sample_rate)
+
+    def inspect_audio_for_spoof(self, audio_data: np.ndarray, pitch_contour: np.ndarray) -> Dict[str, Any]:
+        """
+        Multi-Factor Forensic Analysis on the utterance (e.g. 'Sharma ji 500 bhejo')
+        """
+        # 1. Forensic Feature Extraction
+        fricative_ratio = self.extractor.calculate_fricative_ratio(audio_data)
+        jitter_pct = self.extractor.calculate_micro_jitter(pitch_contour)
+        silence_noise = self.extractor.calculate_silence_entropy(audio_data)
+        anomalies = []
+        risk_points = 0.0
+
+        # Check 1: Jitter Anomaly (Too smooth = AI)
+        if jitter_pct < 0.35:
+            risk_points += 35.0
+            anomalies.append(f"Unnatural pitch monotony detected (Jitter: {jitter_pct:.2f}% - Human threshold > 0.5%)")
+
+        # Check 2: High-frequency Fricative Drop ("Sh" in Sharma)
+        if fricative_ratio < 0.002:
+            risk_points += 35.0
+            anomalies.append("HiFi-GAN neural vocoder cutoff detected at > 6.5 kHz (Muffled/synthetic 'Sh' sound)")
+
+        # Check 3: Digital Silence between words
+        if silence_noise < 0.0005:
+            risk_points += 30.0
+            anomalies.append("Synthetic digital silence detected in inter-word pauses (Absence of room acoustics)")
+
+        # Calculate final verdict
+        is_deepfake = risk_points >= 50.0
+        confidence = min(99.0, max(60.0, risk_points + 15.0)) if is_deepfake else (100.0 - risk_points)
+        return {
+            "verdict": "SPOOF_DETECTED" if is_deepfake else "AUTHENTIC_HUMAN",
+            "is_deepfake": is_deepfake,
+            "risk_score": float(risk_points),
+            "confidence_pct": float(round(confidence, 1)),
+            "metrics": {
+                "micro_jitter_pct": round(jitter_pct, 3),
+                "fricative_energy_ratio": round(fricative_ratio, 5),
+                "ambient_noise_level": round(silence_noise, 5)
+            },
+            "anomalies_flagged": anomalies
+        }
