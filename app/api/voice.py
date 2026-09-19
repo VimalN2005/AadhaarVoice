@@ -33,6 +33,7 @@ from app.ml.denoiser import enhance_indian_ambient_speech
 from app.core.cancellable_biometrics import generate_citizen_salt, shred_audio_buffer
 from app.ml.voice_cloner import clone_speaker_voice
 from app.ml.liveness import generate_challenge
+from app.ml.forensic_xai import get_forensic_xai
 
 router = APIRouter(prefix="/api/voice", tags=["Voice Engine"])
 
@@ -316,9 +317,12 @@ async def detect_deepfake_endpoint(audio_file: UploadFile = File(...)):
     signal, sr = preprocess_audio(audio_bytes, target_sr=settings.SAMPLE_RATE)
     report = detect_deepfake(signal, sr)
     feats = extract_all_features(signal, sr)
+    xai = get_forensic_xai()
+    xai_report = xai.generate_spectrogram_heatmap(signal, n_time_bins=64, n_freq_bins=64)
 
     return {
         "analysis": report,
+        "xai_forensics": xai_report,
         "audio_metrics": {
             "duration_seconds": feats["duration_seconds"],
             "pitch_f0_hz": feats["pitch_f0_hz"],
@@ -402,17 +406,21 @@ async def verify_upi_transaction(
 
     # 3. Run Forensic Inspection
     forensic_result = upi_detector.inspect_audio_for_spoof(audio_np, pitch_contour)
+    xai = get_forensic_xai()
+    xai_map = xai.generate_spectrogram_heatmap(audio_np, n_time_bins=64, n_freq_bins=64)
 
     # 4. Decision Logic
     if forensic_result["is_deepfake"]:
         return {
             "status": "TRANSACTION_BLOCKED",
             "message": f"Security Alert: Voice clone detected! Payment of ₹{amount} to {recipient_name} halted.",
-            "forensics": forensic_result
+            "forensics": forensic_result,
+            "xai_forensics": xai_map
         }
     else:
         return {
             "status": "TRANSACTION_APPROVED",
             "message": f"Biometric & Liveness Verified: ₹{amount} sent successfully to {recipient_name}.",
-            "forensics": forensic_result
+            "forensics": forensic_result,
+            "xai_forensics": xai_map
         }

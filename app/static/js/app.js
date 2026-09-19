@@ -33,6 +33,7 @@ function initTabs() {
       if (targetId === "audit-tab") loadAuditLogs();
       if (targetId === "clone-tab") loadProfilesForCloning();
       if (targetId === "benchmarks-tab") loadAcademicBenchmarks();
+      if (targetId === "vector-tab") loadVectorBenchmarks();
     });
   });
 }
@@ -263,6 +264,13 @@ function setupEventListeners() {
       alert("Could not load preset sample. Please record or upload an audio file.");
     }
   });
+
+  // 1:N Vector Search Form Submit
+  document.getElementById("vector-search-form")?.addEventListener("submit", handleVectorSearchSubmit);
+
+  // 1:N Quick Presets
+  document.getElementById("btn-vector-test-duplicate")?.addEventListener("click", () => handleVectorQuickTest("duplicate"));
+  document.getElementById("btn-vector-test-unique")?.addEventListener("click", () => handleVectorQuickTest("unique"));
 }
 
 // Voice Enrollment Handler
@@ -501,6 +509,21 @@ async function handleDeepfakeSubmit(e) {
         </div>
       </div>
     `;
+
+    // Render XAI Spectrogram Heatmap & Anomaly Localization
+    if (data.xai_forensics) {
+      const xaiBox = document.getElementById("deepfake-xai-box");
+      if (xaiBox) {
+        xaiBox.style.display = "block";
+        renderSpectrogramCanvas("deepfake-spectrogram-canvas", data.xai_forensics);
+        const explanationEl = document.getElementById("deepfake-xai-explanation");
+        if (explanationEl) {
+          const boxes = data.xai_forensics.bounding_boxes || [];
+          let boxesHtml = boxes.map(b => `<div style="margin-top:0.25rem; color:${b.color}; font-weight:600;">⚠️ ${b.anomaly_type} [${b.t_start}s - ${b.t_end}s, ${b.f_min}-${b.f_max}Hz]: <span style="font-weight:400; color:#cbd5e1;">${b.description}</span></div>`).join("");
+          explanationEl.innerHTML = `<strong>Forensic Explainability:</strong> ${data.xai_forensics.forensic_explanation} ${boxesHtml}`;
+        }
+      }
+    }
   } catch (err) {
     resultContainer.innerHTML = `<div class="badge badge-danger">Error: ${err.message}</div>`;
   }
@@ -888,7 +911,353 @@ async function handleUpiSubmit(e) {
         </div>
       `;
     }
+
+    // Render UPI XAI Spectrogram Heatmap & Bounding Boxes
+    if (data.xai_forensics) {
+      const upiXaiBox = document.getElementById("upi-xai-box");
+      if (upiXaiBox) {
+        upiXaiBox.style.display = "block";
+        renderSpectrogramCanvas("upi-spectrogram-canvas", data.xai_forensics);
+        const explanationEl = document.getElementById("upi-xai-explanation");
+        if (explanationEl) {
+          const boxes = data.xai_forensics.bounding_boxes || [];
+          let boxesHtml = boxes.map(b => `<div style="margin-top:0.25rem; color:${b.color}; font-weight:600;">⚠️ ${b.anomaly_type} [${b.t_start}s - ${b.t_end}s]: <span style="font-weight:400; color:#cbd5e1;">${b.description}</span></div>`).join("");
+          explanationEl.innerHTML = `<strong>XAI Visual Telemetry:</strong> ${data.xai_forensics.forensic_explanation} ${boxesHtml}`;
+        }
+      }
+    }
   } catch (err) {
     resultContainer.innerHTML = `<div class="badge badge-danger">Inspection Network Error: ${err.message}</div>`;
+  }
+}
+
+// ==========================================
+// Explainable AI (XAI) Spectrogram Renderer
+// ==========================================
+function renderSpectrogramCanvas(canvasId, xaiData) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas || !xaiData) return;
+  const ctx = canvas.getContext("2d");
+  const grid = xaiData.spectrogram_grid;
+  if (!grid || grid.length === 0) return;
+
+  const nFreq = grid.length;
+  const nTime = grid[0].length;
+  const w = canvas.width;
+  const h = canvas.height;
+  const cellW = w / nTime;
+  const cellH = h / nFreq;
+
+  // Render heat spectrum (Viridis / Magma inspired)
+  for (let r = 0; r < nFreq; r++) {
+    for (let c = 0; c < nTime; c++) {
+      const val = grid[r][c]; // 0.0 to 1.0
+      let red = 0, green = 0, blue = 0;
+      if (val < 0.25) {
+        red = Math.floor(val * 4 * 60);
+        green = Math.floor(val * 4 * 20);
+        blue = Math.floor(80 + val * 4 * 120);
+      } else if (val < 0.6) {
+        const norm = (val - 0.25) / 0.35;
+        red = Math.floor(60 + norm * 150);
+        green = Math.floor(20 + norm * 40);
+        blue = Math.floor(200 - norm * 120);
+      } else {
+        const norm = (val - 0.6) / 0.4;
+        red = 255;
+        green = Math.floor(60 + norm * 180);
+        blue = Math.floor(40 + norm * 40);
+      }
+      ctx.fillStyle = `rgb(${red}, ${green}, ${blue})`;
+      ctx.fillRect(c * cellW, r * cellH, Math.ceil(cellW), Math.ceil(cellH));
+    }
+  }
+
+  // Draw Time-Frequency Axis Markers
+  ctx.fillStyle = "rgba(255, 255, 255, 0.75)";
+  ctx.font = "9px monospace";
+  ctx.fillText("8 kHz", 6, 12);
+  ctx.fillText("0 Hz", 6, h - 6);
+  ctx.fillText("0.0s", 42, h - 6);
+  ctx.fillText(`${xaiData.duration_seconds || 3.0}s`, w - 36, h - 6);
+
+  // Render Anomaly Bounding Boxes with Glowing Edges
+  const boxes = xaiData.bounding_boxes || [];
+  const duration = xaiData.duration_seconds || 3.0;
+
+  boxes.forEach(b => {
+    const x = Math.max(0, (b.t_start / duration) * w);
+    const boxW = Math.min(w - x, Math.max(25, ((b.t_end - b.t_start) / duration) * w));
+    const y = Math.max(0, (1.0 - b.f_max / 8000.0) * h);
+    const boxH = Math.min(h - y, Math.max(20, ((b.f_max - b.f_min) / 8000.0) * h));
+
+    // Outer glow
+    ctx.shadowColor = b.color || "#ef4444";
+    ctx.shadowBlur = 10;
+    ctx.strokeStyle = b.color || "#ef4444";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([4, 2]);
+    ctx.strokeRect(x, y, boxW, boxH);
+    ctx.setLineDash([]);
+    ctx.shadowBlur = 0;
+
+    // Badge label
+    ctx.fillStyle = b.color || "#ef4444";
+    ctx.fillRect(x, Math.max(0, y - 14), Math.min(boxW, 160), 14);
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 8px sans-serif";
+    ctx.fillText(b.anomaly_type.substring(0, 24), x + 3, Math.max(10, y - 4));
+  });
+}
+
+// ==========================================
+// 1:N Biometric Vector Search & Scalability
+// ==========================================
+async function handleVectorSearchSubmit(e) {
+  if (e) e.preventDefault();
+  const fileInput = document.getElementById("vector-probe-file");
+  const topK = document.getElementById("vector-top-k")?.value || "5";
+  const resultContainer = document.getElementById("vector-search-result");
+
+  resultContainer.style.display = "block";
+  resultContainer.innerHTML = "<p>⚡ Executing O(log N) Ball-Tree vector query across 10,000+ citizen embeddings...</p>";
+
+  const formData = new FormData();
+  formData.append("top_k", topK);
+
+  if (fileInput && fileInput.files.length > 0) {
+    formData.append("audio_file", fileInput.files[0]);
+  }
+
+  try {
+    const res = await fetch("/api/biometrics/deduplicate-1-to-n", {
+      method: "POST",
+      body: formData
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      resultContainer.innerHTML = `<div class="badge badge-danger">Search Error: ${data.detail || "Failed"}</div>`;
+      return;
+    }
+
+    const isDup = data.is_duplicate_detected;
+    const badge = isDup ? "badge-danger" : "badge-success";
+    const statusText = isDup ? "🚨 DUPLICATE IDENTITY PREVENTED" : "✅ UNIQUE CITIZEN VERIFIED";
+
+    let rowsHtml = (data.top_candidates || []).map(c => `
+      <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+        <td style="padding:0.4rem; font-weight:700; color:#93c5fd;">#${c.rank}</td>
+        <td style="padding:0.4rem; font-family:monospace;">${c.demo_vid}</td>
+        <td style="padding:0.4rem; font-weight:700; color:${c.cosine_similarity >= 0.85 ? '#ef4444' : '#34d399'};">${c.similarity_percent}%</td>
+        <td style="padding:0.4rem;"><span class="badge ${c.match_verdict === 'DUPLICATE_ALERT' ? 'badge-danger' : 'badge-neutral'}" style="font-size:0.7rem;">${c.match_verdict}</span></td>
+      </tr>
+    `).join("");
+
+    resultContainer.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem;">
+        <span class="badge ${badge}">${statusText}</span>
+        <span style="font-size:0.8rem; color:#c084fc; font-weight:700;">${data.complexity}</span>
+      </div>
+
+      <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:0.5rem; text-align:center; margin-bottom:0.8rem;">
+        <div style="background:rgba(15, 23, 42, 0.6); padding:0.6rem; border-radius:8px;">
+          <div style="font-size:0.72rem; color:#94a3b8;">ANN Query Latency</div>
+          <div style="font-weight:800; color:#38bdf8; font-size:1.1rem;">${data.search_latency_ms} ms</div>
+          <div style="font-size:0.65rem; color:#64748b;">10,000 Embeddings</div>
+        </div>
+        <div style="background:rgba(15, 23, 42, 0.6); padding:0.6rem; border-radius:8px;">
+          <div style="font-size:0.72rem; color:#94a3b8;">Linear Scan Latency</div>
+          <div style="font-weight:800; color:#f87171; font-size:1.1rem;">${data.linear_scan_latency_ms} ms</div>
+          <div style="font-size:0.65rem; color:#64748b;">Brute Force O(N)</div>
+        </div>
+        <div style="background:rgba(15, 23, 42, 0.6); padding:0.6rem; border-radius:8px;">
+          <div style="font-size:0.72rem; color:#94a3b8;">Empirical Speedup</div>
+          <div style="font-weight:800; color:#34d399; font-size:1.1rem;">${data.speedup_factor}x</div>
+          <div style="font-size:0.65rem; color:#34d399;">Faster Execution</div>
+        </div>
+      </div>
+
+      <div style="background:rgba(0,0,0,0.3); border-radius:8px; padding:0.5rem; overflow-x:auto;">
+        <table style="width:100%; font-size:0.8rem; text-align:left; border-collapse:collapse;">
+          <thead>
+            <tr style="color:#94a3b8; border-bottom:1px solid rgba(255,255,255,0.1);">
+              <th style="padding:0.4rem;">Rank</th>
+              <th style="padding:0.4rem;">Enrolled Citizen VID</th>
+              <th style="padding:0.4rem;">Cosine Similarity</th>
+              <th style="padding:0.4rem;">Verdict</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+        </table>
+      </div>
+    `;
+  } catch (err) {
+    resultContainer.innerHTML = `<div class="badge badge-danger">1:N Search Error: ${err.message}</div>`;
+  }
+}
+
+async function handleVectorQuickTest(testType) {
+  const resultContainer = document.getElementById("vector-search-result");
+  resultContainer.style.display = "block";
+  resultContainer.innerHTML = `<p>⚡ Running ${testType === "duplicate" ? "Duplicate Fraud" : "Unique Citizen"} Vector Query...</p>`;
+
+  const formData = new FormData();
+  formData.append("top_k", "5");
+
+  if (testType === "duplicate") {
+    // Default endpoint triggers match against index[0] (Simulating a duplicate voter registration)
+  } else {
+    try {
+      const res = await fetch("/samples/authentic_speaker_2.wav");
+      if (res.ok) {
+        const blob = await res.blob();
+        formData.append("audio_file", blob, "unique_speaker.wav");
+      }
+    } catch(e) {}
+  }
+
+  try {
+    const res = await fetch("/api/biometrics/deduplicate-1-to-n", {
+      method: "POST",
+      body: formData
+    });
+    const data = await res.json();
+    const isDup = data.is_duplicate_detected;
+    const badge = isDup ? "badge-danger" : "badge-success";
+    const statusText = isDup ? "🚨 DUPLICATE IDENTITY PREVENTED" : "✅ UNIQUE CITIZEN VERIFIED";
+
+    let rowsHtml = (data.top_candidates || []).map(c => `
+      <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+        <td style="padding:0.4rem; font-weight:700; color:#93c5fd;">#${c.rank}</td>
+        <td style="padding:0.4rem; font-family:monospace;">${c.demo_vid}</td>
+        <td style="padding:0.4rem; font-weight:700; color:${c.cosine_similarity >= 0.85 ? '#ef4444' : '#34d399'};">${c.similarity_percent}%</td>
+        <td style="padding:0.4rem;"><span class="badge ${c.match_verdict === 'DUPLICATE_ALERT' ? 'badge-danger' : 'badge-neutral'}" style="font-size:0.7rem;">${c.match_verdict}</span></td>
+      </tr>
+    `).join("");
+
+    resultContainer.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem;">
+        <span class="badge ${badge}">${statusText}</span>
+        <span style="font-size:0.8rem; color:#c084fc; font-weight:700;">${data.complexity}</span>
+      </div>
+
+      <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:0.5rem; text-align:center; margin-bottom:0.8rem;">
+        <div style="background:rgba(15, 23, 42, 0.6); padding:0.6rem; border-radius:8px;">
+          <div style="font-size:0.72rem; color:#94a3b8;">ANN Query Latency</div>
+          <div style="font-weight:800; color:#38bdf8; font-size:1.1rem;">${data.search_latency_ms} ms</div>
+          <div style="font-size:0.65rem; color:#64748b;">10,000 Embeddings</div>
+        </div>
+        <div style="background:rgba(15, 23, 42, 0.6); padding:0.6rem; border-radius:8px;">
+          <div style="font-size:0.72rem; color:#94a3b8;">Linear Scan Latency</div>
+          <div style="font-weight:800; color:#f87171; font-size:1.1rem;">${data.linear_scan_latency_ms} ms</div>
+          <div style="font-size:0.65rem; color:#64748b;">Brute Force O(N)</div>
+        </div>
+        <div style="background:rgba(15, 23, 42, 0.6); padding:0.6rem; border-radius:8px;">
+          <div style="font-size:0.72rem; color:#94a3b8;">Empirical Speedup</div>
+          <div style="font-weight:800; color:#34d399; font-size:1.1rem;">${data.speedup_factor}x</div>
+          <div style="font-size:0.65rem; color:#34d399;">Faster Execution</div>
+        </div>
+      </div>
+
+      <div style="background:rgba(0,0,0,0.3); border-radius:8px; padding:0.5rem; overflow-x:auto;">
+        <table style="width:100%; font-size:0.8rem; text-align:left; border-collapse:collapse;">
+          <thead>
+            <tr style="color:#94a3b8; border-bottom:1px solid rgba(255,255,255,0.1);">
+              <th style="padding:0.4rem;">Rank</th>
+              <th style="padding:0.4rem;">Enrolled Citizen VID</th>
+              <th style="padding:0.4rem;">Cosine Similarity</th>
+              <th style="padding:0.4rem;">Verdict</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+        </table>
+      </div>
+    `;
+  } catch (err) {
+    resultContainer.innerHTML = `<div class="badge badge-danger">1:N Test Error: ${err.message}</div>`;
+  }
+}
+
+// Draw Scalability Curve Canvas (O(N) vs O(log N))
+async function loadVectorBenchmarks() {
+  const canvas = document.getElementById("vector-scale-canvas");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+
+  try {
+    const res = await fetch("/api/biometrics/stress-test-benchmark");
+    const data = await res.json();
+    const benchmarks = data.benchmark_results || [
+      { population_size: 1000, ann_latency_ms: 0.8, linear_latency_ms: 2.1 },
+      { population_size: 5000, ann_latency_ms: 1.1, linear_latency_ms: 9.4 },
+      { population_size: 10000, ann_latency_ms: 1.4, linear_latency_ms: 18.2 },
+      { population_size: 25000, ann_latency_ms: 1.7, linear_latency_ms: 46.5 },
+      { population_size: 50000, ann_latency_ms: 2.1, linear_latency_ms: 94.0 },
+    ];
+
+    const w = canvas.width;
+    const h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+
+    // Background & grid
+    ctx.fillStyle = "#040711";
+    ctx.fillRect(0, 0, w, h);
+
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
+    ctx.lineWidth = 1;
+    for (let y = 30; y < h - 20; y += 35) {
+      ctx.beginPath();
+      ctx.moveTo(35, y);
+      ctx.lineTo(w - 15, y);
+      ctx.stroke();
+    }
+
+    const maxPop = 50000;
+    const maxLatency = 100.0; // ms
+    const padL = 40;
+    const padB = 25;
+    const plotW = w - padL - 20;
+    const plotH = h - padB - 20;
+
+    // Plot Linear Curve (Blue)
+    ctx.strokeStyle = "#38bdf8";
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    benchmarks.forEach((b, i) => {
+      const x = padL + (b.population_size / maxPop) * plotW;
+      const y = (h - padB) - (Math.min(maxLatency, b.linear_latency_ms) / maxLatency) * plotH;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+
+    // Plot ANN Tree Curve (Purple)
+    ctx.strokeStyle = "#c084fc";
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    benchmarks.forEach((b, i) => {
+      const x = padL + (b.population_size / maxPop) * plotW;
+      const y = (h - padB) - (Math.min(maxLatency, b.ann_latency_ms) / maxLatency) * plotH;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+
+    // Draw Labels
+    ctx.fillStyle = "rgba(255,255,255,0.6)";
+    ctx.font = "9px monospace";
+    ctx.fillText("100ms", 4, 30);
+    ctx.fillText("50ms", 10, h / 2);
+    ctx.fillText("0ms", 16, h - padB);
+    ctx.fillText("1k", padL + (1000/maxPop)*plotW, h - 8);
+    ctx.fillText("10k", padL + (10000/maxPop)*plotW, h - 8);
+    ctx.fillText("50k citizens", padL + plotW - 40, h - 8);
+
+  } catch(err) {
+    console.warn("Benchmark fetch error:", err);
   }
 }

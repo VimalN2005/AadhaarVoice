@@ -16,6 +16,7 @@ from app.api.identity import router as identity_router
 from app.api.voice import router as voice_router
 from app.api.audit import router as audit_router
 from app.api.benchmarks import router as benchmarks_router
+from app.api.vector_search import router as vector_search_router
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 SAMPLES_DIR = Path(__file__).resolve().parent.parent / "samples"
@@ -71,6 +72,7 @@ app.include_router(identity_router)
 app.include_router(voice_router)
 app.include_router(audit_router)
 app.include_router(benchmarks_router)
+app.include_router(vector_search_router)
 
 
 @app.get("/api/health", tags=["Health"])
