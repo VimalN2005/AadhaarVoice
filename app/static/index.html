@@ -118,6 +118,9 @@
     <button class="tab-btn" data-tab="vector-tab" style="border: 1px solid rgba(139, 92, 246, 0.4); background: rgba(139, 92, 246, 0.08);">
       <span>⚡</span> 9. 1:N Aadhaar Search
     </button>
+    <button class="tab-btn" data-tab="multimodal-tab" style="border: 1px solid rgba(236, 72, 153, 0.4); background: rgba(236, 72, 153, 0.08);">
+      <span>🎥</span> 10. Multi-Modal & Edge 1KB
+    </button>
   </nav>
 
   <!-- Main Workspace -->
@@ -812,6 +815,107 @@
             <strong style="color:#a855f7;">National Identity De-Duplication Guarantee:</strong>
             At 100M population, brute-force linear scan takes &gt;12,000 ms per citizen registration.
             Our cosine metric tree partitions the embedding manifold, achieving <strong>&gt;25× speedup</strong> while guaranteeing sub-millisecond query times and preventing duplicate voter/Aadhaar registrations.
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 10: Multi-Modal Lip-Sync & Edge 1KB Shield -->
+    <section id="multimodal-tab" class="tab-panel">
+      <div class="card-grid">
+        <!-- Card 1: Multi-Modal Lip-Sync Liveness -->
+        <div class="glass-card">
+          <div class="card-title" style="color:#f472b6;">
+            <span>🎥</span> Audio-Visual Lip-Sync Liveness (Replay Defense)
+          </div>
+          <p class="card-desc">
+            Defeats loudspeaker playback and stolen recordings by mathematically cross-correlating <strong>acoustic vocal energy</strong> with <strong>facial lip opening kinematics (aperture)</strong> over time.
+          </p>
+
+          <div style="background:rgba(15, 23, 42, 0.7); border:1px solid rgba(244, 114, 182, 0.3); border-radius:8px; padding:0.9rem; margin-top:0.8rem;">
+            <label style="font-size:0.82rem; font-weight:600; color:#cbd5e1; display:block; margin-bottom:0.4rem;">
+              Select Attack Simulation Scenario:
+            </label>
+            <select id="lipsync-scenario-select" style="width:100%; padding:0.5rem; background:#0f172a; color:#f8fafc; border:1px solid rgba(244, 114, 182, 0.4); border-radius:6px; font-size:0.85rem;">
+              <option value="genuine_live">✅ 1. Genuine Human Speaker (Audio &amp; Lips Synchronized)</option>
+              <option value="speaker_replay_spoof">🚨 2. Speaker Replay Attack (Audio playing, Lips static/frozen)</option>
+              <option value="silent_mime_spoof">🎭 3. Silent Mime Spoof (Lips moving, Zero vocal energy)</option>
+              <option value="deepfake_desync_spoof">🤖 4. Deepfake Lip-Dub Desync (Out-of-phase audio/video lag)</option>
+            </select>
+
+            <button type="button" id="btn-run-lipsync-sim" class="btn btn-primary" style="width:100%; margin-top:0.8rem; background:linear-gradient(135deg, #ec4899, #be185d);">
+              ⚡ Evaluate Multi-Modal Synchrony
+            </button>
+          </div>
+
+          <!-- Live Result Box -->
+          <div id="lipsync-result-box" style="margin-top:1rem; display:none; background:#040711; border:1px solid #334155; border-radius:8px; padding:0.8rem;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span style="font-size:0.8rem; color:#94a3b8;">Liveness Verdict:</span>
+              <span id="lipsync-verdict-badge" style="font-weight:700; font-size:0.85rem; padding:0.2rem 0.6rem; border-radius:4px;"></span>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.6rem; margin-top:0.6rem;">
+              <div style="background:rgba(15, 23, 42, 0.6); padding:0.5rem; border-radius:6px; text-align:center;">
+                <div style="font-size:0.7rem; color:#94a3b8;">Cross-Correlation (r)</div>
+                <div id="lipsync-corr-val" style="font-size:1.1rem; font-weight:700; color:#38bdf8;">--</div>
+              </div>
+              <div style="background:rgba(15, 23, 42, 0.6); padding:0.5rem; border-radius:6px; text-align:center;">
+                <div style="font-size:0.7rem; color:#94a3b8;">Temporal Phase Lag</div>
+                <div id="lipsync-lag-val" style="font-size:1.1rem; font-weight:700; color:#f59e0b;">--</div>
+              </div>
+            </div>
+            <div id="lipsync-reasoning" style="margin-top:0.6rem; font-size:0.78rem; color:#cbd5e1; line-height:1.4; background:rgba(30, 41, 59, 0.4); padding:0.6rem; border-radius:6px;"></div>
+          </div>
+        </div>
+
+        <!-- Card 2: Edge-AI 1KB Zero-Raw-Audio Transmission -->
+        <div class="glass-card">
+          <div class="card-title" style="color:#38bdf8;">
+            <span>📶</span> Edge-AI 1KB Zero-Raw-Audio Transmission (Bandwidth Defense)
+          </div>
+          <p class="card-desc">
+            Answers the rural bandwidth objection: <strong>Raw audio file never leaves the user's phone</strong>. Edge extracts a 192-float encrypted vector locally—transmitting only <strong>0.75 KB</strong> over 2G networks.
+          </p>
+
+          <div style="background:rgba(15, 23, 42, 0.7); border:1px solid rgba(56, 189, 248, 0.3); border-radius:8px; padding:0.9rem; margin-top:0.8rem;">
+            <div style="font-size:0.82rem; color:#cbd5e1; margin-bottom:0.6rem;">
+              <strong>Network Payload Comparison:</strong>
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; background:#0b1120; padding:0.6rem; border-radius:6px; margin-bottom:0.4rem; font-size:0.8rem;">
+              <span>❌ Legacy WAV Audio Upload:</span>
+              <span style="color:#f43f5e; font-weight:700;">160.0 KB (Heavy)</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; background:#0b1120; padding:0.6rem; border-radius:6px; font-size:0.8rem;">
+              <span>✅ Edge 192-Vector Payload:</span>
+              <span style="color:#10b981; font-weight:700;">0.75 KB (99.5% Saved)</span>
+            </div>
+
+            <button type="button" id="btn-run-edge-test" class="btn btn-primary" style="width:100%; margin-top:0.8rem; background:linear-gradient(135deg, #0284c7, #0369a1);">
+              🚀 Test Edge 1KB Verification Benchmark
+            </button>
+          </div>
+
+          <!-- Edge Test Result Box -->
+          <div id="edge-result-box" style="margin-top:1rem; display:none; background:#040711; border:1px solid #334155; border-radius:8px; padding:0.8rem;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span style="font-size:0.8rem; color:#94a3b8;">Transmission Payload:</span>
+              <span style="color:#34d399; font-weight:700; font-size:0.85rem;">0.75 KB (2G Compatible)</span>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:0.4rem; margin-top:0.6rem;">
+              <div style="background:rgba(15, 23, 42, 0.6); padding:0.4rem; border-radius:6px; text-align:center;">
+                <div style="font-size:0.65rem; color:#94a3b8;">Client Time</div>
+                <div id="edge-client-ms" style="font-size:0.95rem; font-weight:700; color:#38bdf8;">--</div>
+              </div>
+              <div style="background:rgba(15, 23, 42, 0.6); padding:0.4rem; border-radius:6px; text-align:center;">
+                <div style="font-size:0.65rem; color:#94a3b8;">Transfer</div>
+                <div id="edge-transfer-ms" style="font-size:0.95rem; font-weight:700; color:#a855f7;">--</div>
+              </div>
+              <div style="background:rgba(15, 23, 42, 0.6); padding:0.4rem; border-radius:6px; text-align:center;">
+                <div style="font-size:0.65rem; color:#94a3b8;">Server Match</div>
+                <div id="edge-server-ms" style="font-size:0.95rem; font-weight:700; color:#10b981;">--</div>
+              </div>
+            </div>
+            <div id="edge-reasoning" style="margin-top:0.6rem; font-size:0.78rem; color:#cbd5e1; line-height:1.4; background:rgba(30, 41, 59, 0.4); padding:0.6rem; border-radius:6px;"></div>
           </div>
         </div>
       </div>
