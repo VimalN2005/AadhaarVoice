@@ -47,7 +47,7 @@ class VoiceProfile(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
-    verifications = relationship("VerificationLog", back_populates="profile", cascade="all, delete-orphan")
+    verifications = relationship("VerificationLog", back_populates="profile")
 
 
 class VerificationLog(Base):
